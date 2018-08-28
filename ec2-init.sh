@@ -1,15 +1,31 @@
 #!/bin/sh
 
-for i in `chkconfig --list | grep 3:on | egrep -v "network|sshd" | awk '{print $1}' `; do echo $i; chkconfig $i off;done
-/etc/init.d/sendmail stop
+#
+# disable autostart svr
+#
+systemctl list-unit-files  | 
+    awk '$1 ~ /service$/ && $2 ~ /enabled/{ print $1}' > /root/.init.autostart.list
+for svr in `cat /root/.init.autostart.list`; do 
+    [[ "x$svr" == "xsshd.service" ]] && continue
+    [[ "x$svr" == "xnetwork.service" ]] && continue
+    [[ "x$svr" == "xirqbalance.service" ]] && continue
+done
+
 
 yum -y -q install automake libtool git
-chkconfig --list | grep 3:on
 
+#
 # user
+#
 useradd yorks
 cp /etc/skel/.bash* /home/yorks/
-sed -i 's/ec2-user/yorks/g' /etc/sudoers.d/cloud-init
+mkdir -p /home/yorks/.ssh
+cat /home/ec2-user/.ssh/authorized_keys  > /home/yorks/.ssh/authorized_keys
+chmod 600 /home/yorks/.ssh/authorized_keys
+chown yorks.yorks /home/yorks/.ssh/authorized_keys
+chown -R yorks.yorks /home/yorks/
+sed -i 's/ec2-user/yorks/g' /etc/sudoers.d/*
+# sshd
 cat > /tmp/sshd_config <<_EOF
 Port 56789
 Port 9922
@@ -23,26 +39,32 @@ AllowTcpForwarding yes
 X11Forwarding yes
 PrintMotd no
 PrintLastLog yes
-UsePrivilegeSeparation sandbox          # Default for new installations.
 UseDNS no
 AcceptEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
 AcceptEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
 AcceptEnv LC_IDENTIFICATION LC_ALL LANGUAGE
 AcceptEnv XMODIFIERS
-Subsystem       sftp    /usr/libexec/openssh/sftp-server
 AllowUsers yorks
 _EOF
+grep "^Subsystem" /etc/ssh/sshd_config >> /tmp/sshd_config
 cat /tmp/sshd_config  > /etc/ssh/sshd_config
 /bin/rm -f /tmp/sshd_config
-mkdir -p /home/yorks/.ssh
-cat /home/ec2-user/.ssh/authorized_keys  > /home/yorks/.ssh/authorized_keys
-chmod 600 /home/yorks/.ssh/authorized_keys
-chown yorks.yorks /home/yorks/.ssh/authorized_keys
-chown -R yorks.yorks /home/yorks/
-/usr/sbin/sshd -t && /etc/init.d/sshd reload
+
+/usr/sbin/sshd -t &&  systemctl  reload sshd
+echo -e "\033[40;31;1;5m pls check login before logout!! \033[0m COOL"
+
+#
 # cron
-/etc/init.d/crond status
+#
 sed -i 's/MAILTO=root/MAILTO=""/g' /etc/crontab
 sed -i 's/MAILTO=root/MAILTO=""/g' /etc/cron.d/0hourly
 grep MAIL /etc/cron*
 grep MAIL /etc/cron*/*
+
+
+#
+# my autostart svr
+#
+echo 'su - yorks -c "sh /home/yorks/SS/bin/ssserver.sh"' >> /etc/rc.d/rc.local
+echo '/home/nginx/sbin/nginx' >> /etc/rc.d/rc.local
+chmod +x /etc/rc.d/rc.local
