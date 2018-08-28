@@ -11,6 +11,8 @@ for svr in `cat /root/.init.autostart.list`; do
     [[ "x$svr" == "xirqbalance.service" ]] && continue
     systemctl disable $svr
 done
+systemctl stop rpcbind.socket
+systemctl disable  rpcbind.socket
 
 
 yum -y -q install automake libtool git
@@ -20,6 +22,13 @@ yum -y -q install automake libtool git
 #
 useradd yorks 2>>/dev/null
 cp /etc/skel/.bash* /home/yorks/
+grep -q HISTSIZE /etc/profile || echo 'export HISTSIZE="999999"' >> /etc/profile
+grep -q HISTTIMEFORMAT /etc/profile || echo 'export HISTTIMEFORMAT="[%F %T] "' >> /etc/profile
+grep -q HISTFILESIZE   /etc/profile || echo 'export HISTFILESIZE="999999"' >> /etc/profile
+
+grep -q ^alias /home/yorks/.bashrc || echo "alias ls='ls --color'" >> /home/yorks/.bashrc
+
+
 mkdir -p /home/yorks/.ssh
 cat /home/ec2-user/.ssh/authorized_keys  > /home/yorks/.ssh/authorized_keys
 chmod 600 /home/yorks/.ssh/authorized_keys
@@ -53,6 +62,19 @@ cat /tmp/sshd_config  > /etc/ssh/sshd_config
 
 /usr/sbin/sshd -t &&  systemctl  reload sshd
 echo -e "\033[40;31;1;5m pls check login before logout!! \033[0m"
+
+
+#
+# openvpn
+#
+yum -q install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum clean all >/dev/null 2>&1
+yum -q install openvpn.x86_64
+test -e /usr/lib64/openvpn/plugin/lib/openvpn-auth-pam.so || {
+      mkdir -p /usr/lib64/openvpn/plugin/lib/
+  ln -s ../../plugins/openvpn-plugin-auth-pam.so /usr/lib64/openvpn/plugin/lib/openvpn-auth-pam.so
+}
+
 
 #
 # cron
